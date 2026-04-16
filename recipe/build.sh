@@ -3,6 +3,21 @@ set -euox pipefail
 
 cd fortran/version3
 
+# HDF5 2.0 renamed the Fortran high-level library from libhdf5hl_fortran
+# (no underscore) to libhdf5_hl_fortran (with underscore), matching the C
+# HL library name (cf. https://github.com/HDFGroup/hdf5/pull/4811).
+# As conda-forge currently builds against both HDF5 1.14.x and 2.x, and the
+# underscored dev symlink is not consistently shipped across platforms for 1.14.x
+# (present on linux-64, absent on osx-arm64), detect which name is available at
+# build time.
+# Once the conda-forge global pinning uses HDF5 v2.0+ this can be simplified.
+if [[ -f "${PREFIX}/lib/libhdf5_hl_fortran${SHLIB_EXT}" ]]; then
+    # HDF5 v2.0+
+    HDF5_HL_FORTRAN_LIB="-lhdf5_hl_fortran"
+else
+    HDF5_HL_FORTRAN_LIB="-lhdf5hl_fortran"
+fi
+
 # Create a conda-forge-specific system makefile.
 # SFINCS requires a system makefile selected via the SFINCS_SYSTEM env var.
 # This makefile sources PETSc's configuration (which sets FC, FLINKER, PETSC_LIB)
@@ -32,7 +47,7 @@ EXTRA_COMPILE_FLAGS = -fPIC -DMPI_Comm=integer \
   -I\${PETSC_DIR}/include -ffree-line-length-none -fallow-argument-mismatch
 
 EXTRA_LINK_FLAGS = -L\${PREFIX}/lib \
-  -lnetcdff -lnetcdf -lhdf5_fortran -lhdf5 -lhdf5_hl -lhdf5hl_fortran
+  -lnetcdff -lnetcdf -lhdf5_fortran -lhdf5 -lhdf5_hl ${HDF5_HL_FORTRAN_LIB}
 
 SFINCS_IS_A_BATCH_SYSTEM_USED = no
 SFINCS_COMMAND_TO_SUBMIT_JOB =
@@ -54,7 +69,7 @@ PETSC_LINK_FLAGS=$(pkg-config --libs petsc 2>/dev/null || echo "-lpetsc")
 mpifort -shared -o libsfincs${SHLIB_EXT} \
     $(ar t libsfincs.a | grep '\.o$') mini_libstell/*.o \
     -L"${PREFIX}/lib" \
-    -lnetcdff -lnetcdf -lhdf5_fortran -lhdf5 -lhdf5_hl -lhdf5hl_fortran \
+    -lnetcdff -lnetcdf -lhdf5_fortran -lhdf5 -lhdf5_hl ${HDF5_HL_FORTRAN_LIB} \
     -llapack -lblas \
     ${PETSC_LINK_FLAGS}
 
